@@ -1,19 +1,19 @@
 import { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 const API_BASE_URL = 'http://119.59.102.161:3110/api';
@@ -80,6 +80,9 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+
+  // Admin Tab State ('products' | 'dashboard')
+  const [adminTab, setAdminTab] = useState<'products' | 'dashboard'>('products');
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -229,7 +232,6 @@ export default function App() {
     }
   };
 
-  // แก้ไขฟังก์ชันลบสินค้า ให้รองรับทั้ง Web และ Native
   const handleDeleteProduct = async (id: number) => {
     const performDelete = async () => {
       try {
@@ -267,6 +269,12 @@ export default function App() {
     const matchesCategory = selectedCategory === 'ALL' || product.category?.toUpperCase() === selectedCategory.toUpperCase();
     return matchesSearch && matchesCategory;
   });
+
+  // Dashboard Calculations
+  const totalProductsCount = products.length;
+  const totalStockCount = products.reduce((sum, p) => sum + Number(p.stock || 0), 0);
+  const potentialInventoryValue = products.reduce((sum, p) => sum + Number(p.price || 0) * Number(p.stock || 0), 0);
+  const lowStockProducts = products.filter((p) => Number(p.stock || 0) < 5);
 
   if (!user) {
     return (
@@ -378,93 +386,164 @@ export default function App() {
           <Text style={styles.vsBrandName}>J U T . F A I</Text>
         </View>
 
-        <View style={styles.vsBottomBar}>
-          <View style={styles.vsSearchContainer}>
-            <TextInput
-              style={styles.vsSearchInput}
-              placeholder="SEARCH"
-              placeholderTextColor="#777"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
+        {/* Admin Navigation Tabs */}
+        {user.role === 'admin' && (
+          <View style={styles.adminNavTabs}>
+            <TouchableOpacity 
+              style={[styles.adminNavTabItem, adminTab === 'products' && styles.adminNavTabActive]}
+              onPress={() => setAdminTab('products')}
+            >
+              <Text style={[styles.adminNavTabText, adminTab === 'products' && styles.adminNavTabTexActive]}>
+                📦 PRODUCTS
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.adminNavTabItem, adminTab === 'dashboard' && styles.adminNavTabActive]}
+              onPress={() => setAdminTab('dashboard')}
+            >
+              <Text style={[styles.adminNavTabText, adminTab === 'dashboard' && styles.adminNavTabTexActive]}>
+                📊 DASHBOARD
+              </Text>
+            </TouchableOpacity>
           </View>
+        )}
 
-          <TouchableOpacity style={styles.vsCartButton} onPress={() => setIsCartOpen(true)}>
-            <Text style={styles.vsCartIconText}>🛒</Text>
-            {totalCartCount > 0 && (
-              <View style={styles.vsCartBadge}>
-                <Text style={styles.vsCartBadgeText}>{totalCartCount}</Text>
+        {/* Search & Cart Bar (Shown for customers or when admin is on products tab) */}
+        {(user.role === 'user' || (user.role === 'admin' && adminTab === 'products')) && (
+          <>
+            <View style={styles.vsBottomBar}>
+              <View style={styles.vsSearchContainer}>
+                <TextInput
+                  style={styles.vsSearchInput}
+                  placeholder="SEARCH"
+                  placeholderTextColor="#777"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
               </View>
-            )}
-          </TouchableOpacity>
-        </View>
 
-        <View style={styles.vsCategoryBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vsCategoryScroll}>
-            {CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                style={[styles.vsCategoryItem, selectedCategory === cat && styles.vsCategoryItemActive]}
-                onPress={() => setSelectedCategory(cat)}
-              >
-                <Text style={[styles.vsCategoryText, selectedCategory === cat && styles.vsCategoryTextActive]}>
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+              {user.role === 'user' && (
+                <TouchableOpacity style={styles.vsCartButton} onPress={() => setIsCartOpen(true)}>
+                  <Text style={styles.vsCartIconText}>🛒</Text>
+                  {totalCartCount > 0 && (
+                    <View style={styles.vsCartBadge}>
+                      <Text style={styles.vsCartBadgeText}>{totalCartCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.vsCategoryBar}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vsCategoryScroll}>
+                {CATEGORIES.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.vsCategoryItem, selectedCategory === cat && styles.vsCategoryItemActive]}
+                    onPress={() => setSelectedCategory(cat)}
+                  >
+                    <Text style={[styles.vsCategoryText, selectedCategory === cat && styles.vsCategoryTextActive]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </>
+        )}
       </View>
 
-      {/* Product List */}
-      {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#111" /></View>
+      {/* Main Content Area: Products vs Dashboard */}
+      {user.role === 'admin' && adminTab === 'dashboard' ? (
+        <ScrollView contentContainerStyle={styles.dashboardContainer}>
+          <Text style={styles.dashboardHeaderTitle}>STORE PERFORMANCE DASHBOARD</Text>
+
+          <View style={styles.dashboardCardGrid}>
+            <View style={styles.dashboardCard}>
+              <Text style={styles.dashboardCardLabel}>TOTAL PRODUCTS</Text>
+              <Text style={styles.dashboardCardValue}>{totalProductsCount}</Text>
+            </View>
+            <View style={styles.dashboardCard}>
+              <Text style={styles.dashboardCardLabel}>TOTAL STOCK UNITS</Text>
+              <Text style={styles.dashboardCardValue}>{totalStockCount}</Text>
+            </View>
+            <View style={styles.dashboardCard}>
+              <Text style={styles.dashboardCardLabel}>POTENTIAL VALUE</Text>
+              <Text style={styles.dashboardCardValue}>฿{potentialInventoryValue.toLocaleString()}</Text>
+            </View>
+            <View style={styles.dashboardCard}>
+              <Text style={styles.dashboardCardLabel}>LOW STOCK ITEMS</Text>
+              <Text style={[styles.dashboardCardValue, { color: lowStockProducts.length > 0 ? '#D32F2F' : '#2E7D32' }]}>
+                {lowStockProducts.length}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.dashboardSubHeader}>⚠️ Low Stock Alerts (&lt; 5 units)</Text>
+          {lowStockProducts.length === 0 ? (
+            <Text style={styles.noLowStockText}>All products are sufficiently stocked.</Text>
+          ) : (
+            lowStockProducts.map((item) => (
+              <View key={item.id} style={styles.lowStockRow}>
+                <Text style={styles.lowStockName}>{item.name}</Text>
+                <Text style={styles.lowStockBadge}>Stock: {item.stock}</Text>
+              </View>
+            ))
+          )}
+        </ScrollView>
       ) : (
-        <FlatList
-          data={filteredProducts}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              {item.image ? (
-                <Image source={{ uri: item.image }} style={styles.productImage} resizeMode="cover" />
-              ) : (
-                <View style={[styles.productImage, styles.placeholderImage]}>
-                  <Text style={styles.placeholderText}>JUT.FAI</Text>
-                </View>
-              )}
-
-              <View style={styles.cardDetails}>
-                <View style={styles.brandRow}>
-                  <Text style={styles.brand}>{item.category || 'SCENTED CANDLE'}</Text>
-                  <Text style={styles.stockText}>Stock: {item.stock}</Text>
-                </View>
-
-                <Text style={styles.title}>{item.name}</Text>
-                <Text style={styles.subText}>Scent: {item.scent || '-'}</Text>
-
-                <View style={styles.footerRow}>
-                  <Text style={styles.price}>฿{Number(item.price).toLocaleString()}</Text>
-                  <TouchableOpacity style={styles.addToCartBtn} onPress={() => addToCart(item)}>
-                    <Text style={styles.addToCartBtnText}>+ Add to Bag</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {user.role === 'admin' && (
-                  <View style={styles.manageRow}>
-                    <TouchableOpacity onPress={() => handleOpenEditModal(item)}>
-                      <Text style={styles.actionEditText}>Edit</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.divider}>|</Text>
-                    <TouchableOpacity onPress={() => handleDeleteProduct(item.id)}>
-                      <Text style={styles.actionDeleteText}>Delete</Text>
-                    </TouchableOpacity>
+        /* Product List */
+        loading ? (
+          <View style={styles.center}><ActivityIndicator size="large" color="#111" /></View>
+        ) : (
+          <FlatList
+            data={filteredProducts}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={styles.listContainer}
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                {item.image ? (
+                  <Image source={{ uri: item.image }} style={styles.productImage} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.productImage, styles.placeholderImage]}>
+                    <Text style={styles.placeholderText}>JUT.FAI</Text>
                   </View>
                 )}
+
+                <View style={styles.cardDetails}>
+                  <View style={styles.brandRow}>
+                    <Text style={styles.brand}>{item.category || 'SCENTED CANDLE'}</Text>
+                    <Text style={styles.stockText}>Stock: {item.stock}</Text>
+                  </View>
+
+                  <Text style={styles.title}>{item.name}</Text>
+                  <Text style={styles.subText}>Scent: {item.scent || '-'}</Text>
+
+                  <View style={styles.footerRow}>
+                    <Text style={styles.price}>฿{Number(item.price).toLocaleString()}</Text>
+                    {user.role === 'user' && (
+                      <TouchableOpacity style={styles.addToCartBtn} onPress={() => addToCart(item)}>
+                        <Text style={styles.addToCartBtnText}>+ Add to Bag</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {user.role === 'admin' && (
+                    <View style={styles.manageRow}>
+                      <TouchableOpacity onPress={() => handleOpenEditModal(item)}>
+                        <Text style={styles.actionEditText}>Edit</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.divider}>|</Text>
+                      <TouchableOpacity onPress={() => handleDeleteProduct(item.id)}>
+                        <Text style={styles.actionDeleteText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-          )}
-        />
+            )}
+          />
+        )
       )}
 
       {/* Cart Modal */}
@@ -568,7 +647,7 @@ const styles = StyleSheet.create({
   authContainer: {
     flex: 1,
     backgroundColor: '#FFF0F3',
-    justify: 'center',
+    justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
@@ -693,6 +772,108 @@ const styles = StyleSheet.create({
     color: '#111',
     letterSpacing: 6,
     textAlign: 'center',
+  },
+
+  // Admin Nav Tabs
+  adminNavTabs: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#EEE',
+    backgroundColor: '#FAFAFA',
+  },
+  adminNavTabItem: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  adminNavTabActive: {
+    backgroundColor: '#FFF',
+    borderBottomWidth: 2,
+    borderBottomColor: '#111',
+  },
+  adminNavTabText: {
+    fontSize: 11,
+    fontFamily: MINIMAL_FONT,
+    color: '#777',
+    letterSpacing: 1,
+  },
+  adminNavTabTexActive: {
+    fontWeight: '700',
+    color: '#111',
+  },
+
+  // Dashboard Styles
+  dashboardContainer: { padding: 16 },
+  dashboardHeaderTitle: {
+    fontFamily: MINIMAL_FONT,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111',
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  dashboardCardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
+  },
+  dashboardCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    padding: 16,
+    borderRadius: 0,
+  },
+  dashboardCardLabel: {
+    fontFamily: MINIMAL_FONT,
+    fontSize: 10,
+    color: '#666',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  dashboardCardValue: {
+    fontFamily: MINIMAL_FONT,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111',
+  },
+  dashboardSubHeader: {
+    fontFamily: MINIMAL_FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111',
+    marginBottom: 10,
+    letterSpacing: 0.5,
+  },
+  noLowStockText: {
+    fontFamily: MINIMAL_FONT,
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  lowStockRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    padding: 12,
+    marginBottom: 8,
+  },
+  lowStockName: {
+    fontFamily: MINIMAL_FONT,
+    fontSize: 12,
+    color: '#111',
+  },
+  lowStockBadge: {
+    fontFamily: MINIMAL_FONT,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#D32F2F',
   },
 
   vsBottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10, gap: 12 },
